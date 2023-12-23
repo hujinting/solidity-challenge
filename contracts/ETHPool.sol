@@ -2,19 +2,19 @@
 pragma solidity ^0.8.9;
 
 contract ETHPool {
-    
-    address public owner;
+    struct User {
+        uint deposits;
+        uint rewards;
+    }
+    mapping(address => User) public users;
     //mapping(address => uint) private userDeposits;
     //mapping(address => uint) private userRewards;
+    address public owner;
+    address[] public totalUsers;
     uint public totalDeposits;
     uint public totalRewards;
-    struct Deposit {
-        uint amount;
-        uint rewardShare;
-    }
-    mapping(address => Deposit) public userDeposits;
     
-    //event Deposit(address indexed user, uint amount);
+    event Deposit(address indexed user, uint amount);
 
     constructor() {
         owner = msg.sender;
@@ -27,30 +27,52 @@ contract ETHPool {
 
     function deposit() external payable {
         require(msg.value > 0, "Please enter an amount greater than 0");
-        Deposit storage userDeposit = userDeposits[msg.sender];
-        if (userDeposit.amount > 0){
-            preReward = totalRewards*(userDeposit.rewardShare/100);
-            userDeposit.amount += msg.value;
-            totalDeposits += msg.value;
-            userDeposit.rewardShare = msg.value/totalDeposits * 100;
-
-        }else{
-            userDeposit.amount = msg.value;
-            totalDeposits += msg.value;
-            userDeposit.rewardShare = 0;      
-        }
-        userDeposits[msg.sender] += msg.value;
+        if (users[msg.sender].deposits == 0){
+            totalUsers.push(msg.sender);
+        }    
+        users[msg.sender].deposits += msg.value;
+        totalDeposits += msg.value;
         
-        //emit Deposit (msg.sender, msg.value);
+        emit Deposit (msg.sender, msg.value);
         
     }
 
     function withdraw() external {
+        require(users[msg.sender].deposits > 0, "User has no deposits to withdraw");
+        uint userDeposit = users[msg.sender].deposits;
+        uint userReward = users[msg.sender].rewards;
+
+        users[msg.sender].deposits = 0;
+        users[msg.sender].rewards = 0;
+
+        payable(msg.sender).transfer(userDeposit);
+        payable(msg.sender).transfer(userReward);
+        totalDeposits -= userDeposit;
+        totalRewards -= userReward;
 
     }
 
     function addReward()  external payable onlyOwner {
         require(msg.value > 0, "Please enter an amount greater than 0");
+        require(totalDeposits > 0, "No deposits");
+        for(uint i=0;i<totalUsers.length;i++){
+            address user = totalUsers[i];
+            uint userDeposit = users[user].deposits;
+            //uint userShare = (userDeposit * 100) / totalDeposits;
+            //uint userReward = msg.value * userShare / 100;
+            uint userReward = msg.value * userDeposit/totalDeposits;
+            users[user].rewards += userReward;
+
+        }
         totalRewards += msg.value;
     }
+
+    function getUserDeposit() external view returns (uint){
+        return users[msg.sender].deposits;
+    }
+
+    function getUserReward() external view returns (uint){
+        return users[msg.sender].rewards;
+    }
+
 }
