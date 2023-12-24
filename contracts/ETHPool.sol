@@ -6,15 +6,15 @@ contract ETHPool {
         uint deposits;
         uint rewards;
     }
-    mapping(address => User) public users;
-    //mapping(address => uint) private userDeposits;
-    //mapping(address => uint) private userRewards;
+    mapping(address => User) public users; 
     address public owner;
     address[] public totalUsers;
     uint public totalDeposits;
     uint public totalRewards;
     
     event Deposit(address indexed user, uint amount);
+    event AddReward(uint timestamp, uint amount);
+    event Withdraw(address indexed user, uint amount);
 
     constructor() {
         owner = msg.sender;
@@ -24,7 +24,7 @@ contract ETHPool {
         require(msg.sender == owner, "Only owner can call this function");
         _;
 }
-
+    //存款
     function deposit() external payable {
         require(msg.value > 0, "Please enter an amount greater than 0");
         if (users[msg.sender].deposits == 0){
@@ -37,42 +37,51 @@ contract ETHPool {
         
     }
 
-    function withdraw() external {
-        require(users[msg.sender].deposits > 0, "User has no deposits to withdraw");
+    //取款
+    function withdraw(uint _amount) external {
+        require(_amount > 0, "Please enter an amount greater than 0");
         uint userDeposit = users[msg.sender].deposits;
         uint userReward = users[msg.sender].rewards;
-
-        users[msg.sender].deposits = 0;
-        users[msg.sender].rewards = 0;
-
-        payable(msg.sender).transfer(userDeposit);
-        payable(msg.sender).transfer(userReward);
-        totalDeposits -= userDeposit;
-        totalRewards -= userReward;
-
+        require(_amount <= (userDeposit+userReward), "Withdraw amount exceeds balance");
+        if (_amount <= userDeposit){
+            users[msg.sender].deposits -= _amount;
+            payable(msg.sender).transfer(_amount);
+            totalDeposits -= _amount;
+        } else{
+            uint diff = _amount - userDeposit;
+            users[msg.sender].deposits = 0;
+            users[msg.sender].rewards -= diff;
+            payable(msg.sender).transfer(_amount);
+            totalDeposits -= userDeposit;
+            totalRewards -= diff;
+        }
     }
 
+    //派发奖励
     function addReward()  external payable onlyOwner {
         require(msg.value > 0, "Please enter an amount greater than 0");
         require(totalDeposits > 0, "No deposits");
         for(uint i=0;i<totalUsers.length;i++){
             address user = totalUsers[i];
             uint userDeposit = users[user].deposits;
-            //uint userShare = (userDeposit * 100) / totalDeposits;
-            //uint userReward = msg.value * userShare / 100;
-            uint userReward = msg.value * userDeposit/totalDeposits;
-            users[user].rewards += userReward;
+            uint userReward = users[user].rewards;
+            uint UserTotal = userDeposit + userReward;
+            uint reward = msg.value * UserTotal / (totalDeposits+totalRewards);
+            users[user].rewards += reward;
 
         }
         totalRewards += msg.value;
+        emit AddReward(block.timestamp, msg.value);
     }
 
-    function getUserDeposit() external view returns (uint){
-        return users[msg.sender].deposits;
+    //查询用户存款
+    function getUserDeposit(address _user) external view returns (uint){
+        return users[_user].deposits;
     }
 
-    function getUserReward() external view returns (uint){
-        return users[msg.sender].rewards;
+    //查询用户奖励
+    function getUserReward(address _user) external view returns (uint){
+        return users[_user].rewards;
     }
 
 }
